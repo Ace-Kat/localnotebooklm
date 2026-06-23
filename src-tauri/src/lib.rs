@@ -40,6 +40,22 @@ pub fn run() {
             std::fs::create_dir_all(&app_data_dir)?;
             let app_data_str = app_data_dir.to_string_lossy().to_string();
 
+            // On macOS, ensure Ollama is running before the frontend starts polling.
+            // Try the official .app first; fall back to `ollama serve` for Homebrew/CLI installs.
+            #[cfg(target_os = "macos")]
+            {
+                let app_opened = std::process::Command::new("open")
+                    .args(["-a", "Ollama"])
+                    .output()
+                    .map(|o| o.status.success())
+                    .unwrap_or(false);
+                if !app_opened {
+                    let _ = std::process::Command::new("ollama")
+                        .arg("serve")
+                        .spawn();
+                }
+            }
+
             // In release builds, try the sidecar bundled by Tauri first.
             // In debug builds (cargo tauri dev), fall back to spawning Python directly.
             let child: Option<Child> = {
@@ -58,11 +74,23 @@ pub fn run() {
                             resource_dir.join("backend")
                         };
                         if bin.exists() {
-                            spawned = std::process::Command::new(&bin)
+                            // macOS quarantine (com.apple.quarantine) can block subprocess
+                            // execution even after the user approves the outer .app bundle.
+                            #[cfg(target_os = "macos")]
+                            {
+                                let _ = std::process::Command::new("xattr")
+                                    .args(["-d", "com.apple.quarantine"])
+                                    .arg(&bin)
+                                    .output();
+                            }
+                            match std::process::Command::new(&bin)
                                 .env("APP_DATA_DIR", &app_data_str)
                                 .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
                                 .spawn()
-                                .ok();
+                            {
+                                Ok(child) => { spawned = Some(child); }
+                                Err(e) => { eprintln!("[LocalNotebookLM] backend spawn failed: {e}"); }
+                            }
                         }
                     }
                 }
@@ -71,14 +99,17 @@ pub fn run() {
                 if spawned.is_none() {
                     if let Some(backend_dir) = find_backend_dir() {
                         let python = find_python(&backend_dir);
-                        spawned = std::process::Command::new(&python)
+                        match std::process::Command::new(&python)
                             .args(["-m", "uvicorn", "main:app",
                                    "--port", "47392", "--host", "127.0.0.1"])
                             .current_dir(&backend_dir)
                             .env("APP_DATA_DIR", &app_data_str)
                             .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
                             .spawn()
-                            .ok();
+                        {
+                            Ok(child) => { spawned = Some(child); }
+                            Err(e) => { eprintln!("[LocalNotebookLM] dev backend spawn failed: {e}"); }
+                        }
                     }
                 }
 

@@ -34,28 +34,31 @@ jobs:
         run: |
           cd backend
           python -m venv .venv
+          PYINSTALLER_ARGS=(
+            --onefile --name backend
+            --collect-all chromadb
+            --collect-all uvicorn
+            --collect-all fastapi
+            --collect-all pypdf
+            --hidden-import uvicorn.logging
+            --hidden-import uvicorn.loops.auto
+            --hidden-import uvicorn.protocols.http.auto
+            --hidden-import uvicorn.lifespan.on
+            --hidden-import pydantic
+            --hidden-import pydantic.v1
+            --hidden-import pydantic_core
+            --hidden-import starlette.routing
+            --hidden-import starlette.middleware.cors
+            --hidden-import httpx._transports.default
+            --hidden-import multipart
+            main.py
+          )
           if [ "$RUNNER_OS" = "Windows" ]; then
             .venv/Scripts/pip install -r requirements.txt pyinstaller
-            .venv/Scripts/pyinstaller \
-              --onefile --name backend \
-              --collect-all chromadb \
-              --collect-all uvicorn \
-              --hidden-import uvicorn.logging \
-              --hidden-import uvicorn.loops.auto \
-              --hidden-import uvicorn.protocols.http.auto \
-              --hidden-import uvicorn.lifespan.on \
-              main.py
+            .venv/Scripts/pyinstaller "${PYINSTALLER_ARGS[@]}"
           else
             .venv/bin/pip install -r requirements.txt pyinstaller
-            .venv/bin/pyinstaller \
-              --onefile --name backend \
-              --collect-all chromadb \
-              --collect-all uvicorn \
-              --hidden-import uvicorn.logging \
-              --hidden-import uvicorn.loops.auto \
-              --hidden-import uvicorn.protocols.http.auto \
-              --hidden-import uvicorn.lifespan.on \
-              main.py
+            .venv/bin/pyinstaller "${PYINSTALLER_ARGS[@]}"
           fi
 
       - name: Add backend binary to Tauri resources

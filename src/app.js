@@ -55,17 +55,41 @@ async function runSetupFlow() {
     return;
   }
 
-  if (!status.ollama_running || REQUIRED_MODELS.some(m => !status.models[m])) {
+  // Ollama may still be starting up (just auto-launched on macOS). Poll until it
+  // responds or we give up, so the user doesn't get stuck on the setup screen.
+  let current = status;
+  if (!current.ollama_running) {
     show('setup-screen');
-    renderSetupScreen(status);
-    if (status.ollama_running && REQUIRED_MODELS.some(m => !status.models[m])) {
-      document.getElementById('setup-pull-btn').style.display = 'none';
-      await autoPullAll(status.models);
-    }
+    renderSetupScreen(current);
+    current = await waitForOllama(current);
+  }
+
+  if (!current.ollama_running) {
+    renderSetupScreen(current);
+    return;
+  }
+
+  if (REQUIRED_MODELS.some(m => !current.models[m])) {
+    show('setup-screen');
+    renderSetupScreen(current);
+    document.getElementById('setup-pull-btn').style.display = 'none';
+    await autoPullAll(current.models);
     return;
   }
 
   await enterApp();
+}
+
+async function waitForOllama(initialStatus, maxAttempts = 15) {
+  for (let i = 0; i < maxAttempts; i++) {
+    await sleep(2000);
+    try {
+      const s = await fetch(API + '/api/status').then(r => r.json());
+      renderSetupScreen(s);
+      if (s.ollama_running) return s;
+    } catch (_) {}
+  }
+  return initialStatus;
 }
 
 async function autoPullAll(modelStatus) {
@@ -85,11 +109,24 @@ async function autoPullAll(modelStatus) {
   }
 }
 
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+// Set platform-appropriate install hint once on load
+(function () {
+  const hint = document.getElementById('ollama-step-hint');
+  if (hint && !IS_MAC) {
+    hint.innerHTML = 'After installing, run <code style="display:inline;padding:1px 5px;">ollama serve</code> in a terminal.';
+  }
+})();
+
 function renderSetupScreen(status) {
   const ollamaDesc = document.getElementById('ollama-step-desc');
   if (status.ollama_running) {
     ollamaDesc.textContent = '✓ Ollama is running.';
     ollamaDesc.style.color = '#15803d';
+  } else if (IS_MAC) {
+    ollamaDesc.textContent = 'Ollama is not running. Open Ollama from your Applications folder or menu bar, then click Check Again.';
+    ollamaDesc.style.color = 'var(--danger)';
   } else {
     ollamaDesc.textContent = 'Ollama is not detected. Please install and start it.';
     ollamaDesc.style.color = 'var(--danger)';
