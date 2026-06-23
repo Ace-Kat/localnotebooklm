@@ -152,6 +152,19 @@
   </div>
 </div>
 
+<!-- ── Train Confirm Modal ── -->
+<div id="train-confirm-modal" class="modal-backdrop hidden">
+  <div class="modal">
+    <h2>Train Model on Documents</h2>
+    <p>This fine-tunes the AI specifically on your notebook's content — not just retrieval.<br><br>
+    First run downloads ~4 GB of model files and takes <strong>10–30 minutes</strong> on Apple Silicon. Subsequent retrains are faster once the model is cached.</p>
+    <div class="modal-footer">
+      <button class="btn-secondary" id="train-confirm-cancel">Cancel</button>
+      <button class="btn-primary" id="train-confirm-ok">Start Training</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Delete Notebook Modal ── -->
 <div id="delete-notebook-modal" class="modal-backdrop hidden">
   <div class="modal">

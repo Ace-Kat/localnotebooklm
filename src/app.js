@@ -316,16 +316,18 @@ function renderTrainSection(trained) {
   btn.disabled = trainingInProgress;
 }
 
-document.getElementById('train-btn').addEventListener('click', async () => {
+document.getElementById('train-btn').addEventListener('click', () => {
   if (trainingInProgress || !state.activeId) return;
+  document.getElementById('train-confirm-modal').classList.remove('hidden');
+  setTimeout(() => document.getElementById('train-confirm-ok').focus(), 50);
+});
 
-  const confirmed = confirm(
-    'Training fine-tunes the AI specifically on your uploaded documents.\n\n' +
-    'First run downloads ~4 GB of model files and takes 10–30 minutes on Apple Silicon.\n' +
-    'Subsequent retrains are faster (model is cached).\n\n' +
-    'Continue?'
-  );
-  if (!confirmed) return;
+document.getElementById('train-confirm-cancel').addEventListener('click', () => {
+  document.getElementById('train-confirm-modal').classList.add('hidden');
+});
+
+document.getElementById('train-confirm-ok').addEventListener('click', async () => {
+  document.getElementById('train-confirm-modal').classList.add('hidden');
 
   trainingInProgress = true;
   const banner = document.getElementById('train-banner');
