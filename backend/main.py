@@ -251,3 +251,8 @@ def clear_chat(nb_id: str):
     if not database.get_notebook(nb_id):
         raise HTTPException(404, "Notebook not found.")
     database.clear_chat_history(nb_id)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=47392)
