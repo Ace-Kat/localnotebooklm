@@ -272,6 +272,137 @@ async function enterApp() {
   await loadNotebooks();
 }
 
+// ── Training ──────────────────────────────────────────────────────────────────
+let trainingInProgress = false;
+
+async function checkTrainingStatus() {
+  if (!state.activeId) return;
+  try {
+    const s = await api('GET', `/api/notebooks/${state.activeId}/training-status`);
+    renderTrainSection(s.trained);
+  } catch (_) {
+    renderTrainSection(false);
+  }
+}
+
+function renderTrainSection(trained) {
+  const section = document.getElementById('train-section');
+  const banner = document.getElementById('train-banner');
+  const label = document.getElementById('train-status-label');
+  const sub = document.getElementById('train-status-sub');
+  const btn = document.getElementById('train-btn');
+  const progressSection = document.getElementById('train-progress-section');
+
+  if (state.documents.length === 0) {
+    section.classList.add('hidden');
+    return;
+  }
+
+  section.classList.remove('hidden');
+  progressSection.classList.add('hidden');
+  banner.classList.remove('hidden');
+
+  if (trained) {
+    banner.classList.add('trained');
+    label.textContent = 'Model trained on these documents';
+    sub.textContent = 'Chat uses your fine-tuned model + retrieval';
+    btn.textContent = 'Retrain';
+  } else {
+    banner.classList.remove('trained');
+    label.textContent = 'Train model on these documents';
+    sub.textContent = 'Fine-tune the AI on your content — not just retrieval';
+    btn.textContent = 'Train Model';
+  }
+  btn.disabled = trainingInProgress;
+}
+
+document.getElementById('train-btn').addEventListener('click', async () => {
+  if (trainingInProgress || !state.activeId) return;
+
+  const confirmed = confirm(
+    'Training fine-tunes the AI specifically on your uploaded documents.\n\n' +
+    'First run downloads ~4 GB of model files and takes 10–30 minutes on Apple Silicon.\n' +
+    'Subsequent retrains are faster (model is cached).\n\n' +
+    'Continue?'
+  );
+  if (!confirmed) return;
+
+  trainingInProgress = true;
+  const banner = document.getElementById('train-banner');
+  const progressSection = document.getElementById('train-progress-section');
+  const fill = document.getElementById('train-progress-fill');
+  const progressText = document.getElementById('train-progress-text');
+  const btn = document.getElementById('train-btn');
+
+  btn.disabled = true;
+  banner.classList.add('hidden');
+  progressSection.classList.remove('hidden');
+  fill.style.width = '0%';
+  fill.style.background = 'var(--accent)';
+  progressText.style.color = '';
+  progressText.textContent = 'Starting…';
+
+  try {
+    const res = await fetch(API + '/api/notebooks/' + state.activeId + '/train', { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail || res.statusText);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n\n');
+      buf = lines.pop();
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.type === 'progress') {
+            fill.style.width = (data.percent || 0) + '%';
+            progressText.textContent = data.message || 'Training…';
+          } else if (data.type === 'done') {
+            fill.style.width = '100%';
+            progressText.textContent = data.message || 'Training complete!';
+            trainingInProgress = false;
+            await sleep(1800);
+            await checkTrainingStatus();
+            updateModelModeBar(true);
+          } else if (data.type === 'error') {
+            throw new Error(data.message);
+          }
+        } catch (parseErr) {
+          if (parseErr.message !== 'Unexpected end of JSON input') throw parseErr;
+        }
+      }
+    }
+  } catch (err) {
+    progressText.textContent = '⚠ ' + err.message;
+    progressText.style.color = 'var(--danger)';
+    fill.style.background = 'var(--danger)';
+    trainingInProgress = false;
+    btn.disabled = false;
+    banner.classList.remove('hidden');
+  }
+});
+
+function updateModelModeBar(trained) {
+  const bar = document.getElementById('model-mode-bar');
+  const text = document.getElementById('model-mode-text');
+  if (trained) {
+    bar.classList.remove('hidden');
+    text.textContent = '🧠 Using fine-tuned model + retrieval';
+  } else {
+    bar.classList.add('hidden');
+  }
+}
+
 // ── Notebooks ────────────────────────────────────────────────────────────────
 async function loadNotebooks() {
   state.notebooks = await api('GET', '/api/notebooks');
@@ -306,7 +437,7 @@ async function openNotebook(id) {
   const nb = state.notebooks.find(n => n.id === id);
   document.getElementById('notebook-title-input').value = nb ? nb.name : '';
 
-  await Promise.all([loadDocuments(), loadChatHistory()]);
+  await Promise.all([loadDocuments(), loadChatHistory(), checkTrainingStatus()]);
   switchTab('documents');
 }
 
@@ -415,6 +546,9 @@ function renderDocuments() {
   // Large notebook notice
   const totalChunks = state.documents.reduce((s, d) => s + d.chunk_count, 0);
   document.getElementById('large-notebook-notice').classList.toggle('hidden', totalChunks < LARGE_CHUNK_THRESHOLD);
+
+  // Re-render train section now that doc count is known
+  checkTrainingStatus();
 }
 
 async function removeDocument(filename) {
@@ -628,6 +762,7 @@ async function sendMessage() {
     state.chatMessages.push(response);
     el.appendChild(renderMessage(response));
     scrollChatToBottom();
+    if (response.used_adapter) updateModelModeBar(true);
   } catch (err) {
     thinkingDiv.remove();
     const errMsg = { role: 'assistant', message: '⚠ Error: ' + err.message, citations: [] };

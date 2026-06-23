@@ -12,6 +12,7 @@ from fastapi.responses import StreamingResponse
 
 import database
 import rag
+import training
 
 database.init_db()
 
@@ -177,6 +178,41 @@ async def upload_document(nb_id: str, file: UploadFile = File(...)):
             await ingest_task
 
     return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@app.get("/api/notebooks/{nb_id}/training-status")
+def get_training_status(nb_id: str):
+    if not database.get_notebook(nb_id):
+        raise HTTPException(404, "Notebook not found.")
+    return {"trained": training.adapter_exists(nb_id)}
+
+
+@app.post("/api/notebooks/{nb_id}/train")
+async def train_notebook_endpoint(nb_id: str):
+    if not database.get_notebook(nb_id):
+        raise HTTPException(404, "Notebook not found.")
+    collection = rag.get_collection(nb_id)
+    all_data = collection.get(include=["documents", "metadatas"])
+    if not all_data["ids"]:
+        raise HTTPException(400, "No documents in notebook. Upload documents first.")
+    chunks = all_data["documents"]
+    sources = [m["source"] for m in all_data["metadatas"]]
+
+    async def _stream() -> AsyncGenerator[str, None]:
+        try:
+            async for event in training.train_notebook(nb_id, chunks, sources):
+                yield f"data: {json.dumps(event)}\n\n"
+        except Exception as e:
+            yield f'data: {json.dumps({"type": "error", "message": str(e)})}\n\n'
+
+    return StreamingResponse(_stream(), media_type="text/event-stream")
+
+
+@app.delete("/api/notebooks/{nb_id}/adapter", status_code=204)
+def delete_adapter(nb_id: str):
+    if not database.get_notebook(nb_id):
+        raise HTTPException(404, "Notebook not found.")
+    training.delete_adapter(nb_id)
 
 
 @app.delete("/api/notebooks/{nb_id}/documents/{filename:path}", status_code=204)

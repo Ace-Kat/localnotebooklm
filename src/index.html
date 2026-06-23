@@ -105,11 +105,31 @@
         <div id="large-notebook-notice" class="large-notebook-notice hidden">
           ⚠ This notebook is large. Retrieval may take longer than usual.
         </div>
+
+        <!-- Training section -->
+        <div id="train-section" class="hidden">
+          <div id="train-banner" class="train-banner">
+            <div class="train-banner-info">
+              <strong id="train-status-label">Train model on these documents</strong>
+              <span id="train-status-sub">Fine-tune the AI on your content — not just retrieval</span>
+            </div>
+            <button class="btn-primary" id="train-btn">Train Model</button>
+          </div>
+          <div id="train-progress-section" class="hidden">
+            <div class="train-progress-bar-track">
+              <div class="train-progress-bar-fill" id="train-progress-fill"></div>
+            </div>
+            <span id="train-progress-text" class="train-progress-label">Preparing…</span>
+          </div>
+        </div>
       </div>
 
       <!-- Chat panel -->
       <div id="chat-panel" class="hidden">
         <div id="chat-messages"></div>
+        <div id="model-mode-bar" class="model-mode-bar hidden">
+          <span id="model-mode-text"></span>
+        </div>
         <div class="chat-input-row">
           <textarea id="chat-input" rows="1" placeholder="Ask a question about your documents…"></textarea>
           <button id="send-btn" title="Send">&#10148;</button>

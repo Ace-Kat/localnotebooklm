@@ -57,7 +57,8 @@ jobs:
             .venv/Scripts/pip install -r requirements.txt pyinstaller
             .venv/Scripts/pyinstaller "${PYINSTALLER_ARGS[@]}"
           else
-            .venv/bin/pip install -r requirements.txt pyinstaller
+            .venv/bin/pip install -r requirements.txt mlx-lm pyinstaller
+            PYINSTALLER_ARGS+=(--collect-all mlx_lm --collect-all mlx)
             .venv/bin/pyinstaller "${PYINSTALLER_ARGS[@]}"
           fi
 

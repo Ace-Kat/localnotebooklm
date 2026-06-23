@@ -1,4 +1,5 @@
 import os
+import platform
 from pathlib import Path
 from datetime import datetime, timezone
 from typing import Callable, Awaitable
@@ -194,27 +195,43 @@ async def query_notebook(notebook_id: str, question: str, top_k: int = 4) -> dic
         "Answer:"
     )
 
-    try:
-        async with httpx.AsyncClient(timeout=180.0) as client:
-            resp = await client.post(
-                f"{OLLAMA_BASE}/api/chat",
-                json={
-                    "model": LLM_MODEL,
-                    "messages": [{"role": "user", "content": prompt}],
-                    "stream": False,
-                },
-            )
-            resp.raise_for_status()
-            answer = resp.json()["message"]["content"]
-    except httpx.ConnectError:
-        return {
-            "answer": "Cannot reach Ollama. Make sure Ollama is running (`ollama serve`).",
-            "sources": [],
-        }
+    answer = None
+    used_adapter = False
+
+    # Use the fine-tuned adapter when available (macOS only)
+    if platform.system() == "Darwin":
+        try:
+            import training
+            if training.adapter_exists(notebook_id):
+                answer = await training.generate_with_adapter(notebook_id, prompt)
+                used_adapter = True
+        except Exception:
+            pass  # fall through to Ollama
+
+    if answer is None:
+        try:
+            async with httpx.AsyncClient(timeout=180.0) as client:
+                resp = await client.post(
+                    f"{OLLAMA_BASE}/api/chat",
+                    json={
+                        "model": LLM_MODEL,
+                        "messages": [{"role": "user", "content": prompt}],
+                        "stream": False,
+                    },
+                )
+                resp.raise_for_status()
+                answer = resp.json()["message"]["content"]
+        except httpx.ConnectError:
+            return {
+                "answer": "Cannot reach Ollama. Make sure Ollama is running (`ollama serve`).",
+                "sources": [],
+                "used_adapter": False,
+            }
 
     return {
         "answer": answer,
         "sources": [
             {"filename": m["source"], "chunk_index": m["chunk_index"]} for m in metas
         ],
+        "used_adapter": used_adapter,
     }
