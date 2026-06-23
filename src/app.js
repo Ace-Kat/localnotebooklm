@@ -58,10 +58,31 @@ async function runSetupFlow() {
   if (!status.ollama_running || REQUIRED_MODELS.some(m => !status.models[m])) {
     show('setup-screen');
     renderSetupScreen(status);
+    if (status.ollama_running && REQUIRED_MODELS.some(m => !status.models[m])) {
+      document.getElementById('setup-pull-btn').style.display = 'none';
+      await autoPullAll(status.models);
+    }
     return;
   }
 
   await enterApp();
+}
+
+async function autoPullAll(modelStatus) {
+  const errEl = document.getElementById('setup-error');
+  errEl.style.display = 'none';
+  try {
+    for (const model of REQUIRED_MODELS) {
+      if (modelStatus[model]) continue;
+      await pullModelWithProgress(model);
+    }
+    await enterApp();
+  } catch (err) {
+    errEl.textContent = '⚠ Download failed: ' + err.message;
+    errEl.style.display = '';
+    document.getElementById('setup-pull-btn').style.display = '';
+    document.getElementById('setup-pull-btn').disabled = false;
+  }
 }
 
 function renderSetupScreen(status) {
@@ -109,8 +130,12 @@ document.getElementById('setup-recheck-btn').addEventListener('click', async () 
   try {
     const status = await fetch(API + '/api/status').then(r => r.json());
     renderSetupScreen(status);
-    const allReady = status.ollama_running && REQUIRED_MODELS.every(m => status.models[m]);
-    if (allReady) await enterApp();
+    if (status.ollama_running && REQUIRED_MODELS.every(m => status.models[m])) {
+      await enterApp();
+    } else if (status.ollama_running && REQUIRED_MODELS.some(m => !status.models[m])) {
+      document.getElementById('setup-pull-btn').style.display = 'none';
+      await autoPullAll(status.models);
+    }
   } catch (e) {
     renderSetupScreen({ ollama_running: false, models: {} });
   }
