@@ -1,6 +1,6 @@
 'use strict';
 
-const API = 'http://127.0.0.1:8765';
+const API = 'http://127.0.0.1:47392';
 const LARGE_CHUNK_THRESHOLD = 50000; // ~5GB worth of ~500-word chunks
 
 // ── State ────────────────────────────────────────────────────────────────────

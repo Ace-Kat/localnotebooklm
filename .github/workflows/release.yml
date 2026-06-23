@@ -72,6 +72,13 @@ jobs:
               json.dump(conf, f, indent=2)
           print(f"Resources: {src} -> {bin_name}")
 
+      - name: Sign and set permissions on backend binary (macOS only)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          chmod +x backend/dist/backend
+          codesign --force --deep --sign - backend/dist/backend
+
       - name: Set up Node.js 20
         uses: actions/setup-node@v4
         with:

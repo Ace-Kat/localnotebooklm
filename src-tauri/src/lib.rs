@@ -73,7 +73,7 @@ pub fn run() {
                         let python = find_python(&backend_dir);
                         spawned = std::process::Command::new(&python)
                             .args(["-m", "uvicorn", "main:app",
-                                   "--port", "8765", "--host", "127.0.0.1"])
+                                   "--port", "47392", "--host", "127.0.0.1"])
                             .current_dir(&backend_dir)
                             .env("APP_DATA_DIR", &app_data_str)
                             .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
