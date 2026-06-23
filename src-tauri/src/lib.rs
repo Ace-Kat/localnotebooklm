@@ -85,7 +85,6 @@ pub fn run() {
                             }
                             match std::process::Command::new(&bin)
                                 .env("APP_DATA_DIR", &app_data_str)
-                                .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
                                 .spawn()
                             {
                                 Ok(child) => { spawned = Some(child); }

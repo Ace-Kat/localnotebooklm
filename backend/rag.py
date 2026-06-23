@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Callable, Awaitable
 
 import httpx
-import chromadb
+import vectorstore as _vs
 
 OLLAMA_BASE = "http://localhost:11434"
 EMBED_MODEL = "nomic-embed-text"
@@ -15,33 +15,27 @@ CHUNK_OVERLAP = 50
 EMBED_BATCH = 32
 
 
-def _chroma_path() -> Path:
-    d = Path(os.environ.get("APP_DATA_DIR", str(Path(__file__).parent.parent / "data"))) / "chroma"
+def _vstore_path() -> Path:
+    d = Path(os.environ.get("APP_DATA_DIR", str(Path(__file__).parent.parent / "data"))) / "vstore"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def _get_client() -> chromadb.ClientAPI:
-    return chromadb.PersistentClient(path=str(_chroma_path()))
+def _get_client() -> _vs.Client:
+    return _vs.Client(_vstore_path())
 
 
 def _collection_name(notebook_id: str) -> str:
-    # Chroma collection names: alphanumeric + underscore, 3–63 chars
     return "nb_" + notebook_id.replace("-", "")
 
 
-def get_collection(notebook_id: str):
-    client = _get_client()
-    return client.get_or_create_collection(
-        name=_collection_name(notebook_id),
-        metadata={"hnsw:space": "cosine"},
-    )
+def get_collection(notebook_id: str) -> _vs.Collection:
+    return _get_client().get_or_create_collection(_collection_name(notebook_id))
 
 
 def delete_collection(notebook_id: str):
-    client = _get_client()
     try:
-        client.delete_collection(_collection_name(notebook_id))
+        _get_client().delete_collection(_collection_name(notebook_id))
     except Exception:
         pass
 
