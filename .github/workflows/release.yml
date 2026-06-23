@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python deps and PyInstaller
+        shell: bash
+        run: |
+          cd backend
+          python -m venv .venv
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            .venv/Scripts/pip install -r requirements.txt pyinstaller
+            .venv/Scripts/pyinstaller \
+              --onefile --name backend \
+              --collect-all chromadb \
+              --collect-all uvicorn \
+              --hidden-import uvicorn.logging \
+              --hidden-import uvicorn.loops.auto \
+              --hidden-import uvicorn.protocols.http.auto \
+              --hidden-import uvicorn.lifespan.on \
+              main.py
+          else
+            .venv/bin/pip install -r requirements.txt pyinstaller
+            .venv/bin/pyinstaller \
+              --onefile --name backend \
+              --collect-all chromadb \
+              --collect-all uvicorn \
+              --hidden-import uvicorn.logging \
+              --hidden-import uvicorn.loops.auto \
+              --hidden-import uvicorn.protocols.http.auto \
+              --hidden-import uvicorn.lifespan.on \
+              main.py
+          fi
+
+      - name: Add backend binary to Tauri resources
+        shell: python
+        run: |
+          import json, os
+          is_windows = os.environ.get('RUNNER_OS') == 'Windows'
+          bin_name = 'backend.exe' if is_windows else 'backend'
+          src = f'../backend/dist/{bin_name}'
+          with open('src-tauri/tauri.conf.json') as f:
+              conf = json.load(f)
+          conf['bundle']['resources'] = {src: bin_name}
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(conf, f, indent=2)
+          print(f"Resources: {src} -> {bin_name}")
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install npm deps
+        run: npm install
+
+      - name: Set up Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'LocalNotebookLM ${{ github.ref_name }}'
+          releaseBody: |
+            ## Before you install
+
+            **Ollama is required** — download from https://ollama.ai and run:
+            ```
+            ollama pull qwen2.5:7b-instruct-q4_K_M
+            ollama pull nomic-embed-text
+            ```
+            (~5 GB total, one-time download). The app will guide you through this on first launch.
+
+            ## Install
+
+            | Platform | File |
+            |----------|------|
+            | macOS (Apple Silicon) | `.dmg` |
+            | Windows (x64) | `.msi` |
+
+            **macOS:** The app is unsigned. On first launch right-click → Open → Open anyway to bypass Gatekeeper.
+
+            **Windows:** If SmartScreen warns you, click "More info" → "Run anyway".
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

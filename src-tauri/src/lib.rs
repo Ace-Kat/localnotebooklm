@@ -47,22 +47,23 @@ pub fn run() {
 
                 #[cfg(not(debug_assertions))]
                 {
-                    // Production: look for bundled backend binary in resources
-                    let exe_dir = std::env::current_exe()
-                        .ok()
-                        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
-                        .unwrap_or_default();
-                    let bin = if cfg!(target_os = "windows") {
-                        exe_dir.join("resources/backend.exe")
-                    } else {
-                        exe_dir.join("resources/backend")
-                    };
-                    if bin.exists() {
-                        spawned = std::process::Command::new(&bin)
-                            .env("APP_DATA_DIR", &app_data_str)
-                            .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
-                            .spawn()
-                            .ok();
+                    // Production: find the PyInstaller-frozen backend in the app resource dir.
+                    // resource_dir() returns the correct platform path:
+                    //   macOS  → <App>.app/Contents/Resources/
+                    //   Windows → <install>/resources/
+                    if let Ok(resource_dir) = app.path().resource_dir() {
+                        let bin = if cfg!(target_os = "windows") {
+                            resource_dir.join("backend.exe")
+                        } else {
+                            resource_dir.join("backend")
+                        };
+                        if bin.exists() {
+                            spawned = std::process::Command::new(&bin)
+                                .env("APP_DATA_DIR", &app_data_str)
+                                .env("CHROMA_ANONYMIZED_TELEMETRY", "False")
+                                .spawn()
+                                .ok();
+                        }
                     }
                 }
 
