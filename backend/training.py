@@ -105,7 +105,9 @@ async def train_notebook(
         stderr=asyncio.subprocess.STDOUT,
     )
 
-    download_start = asyncio.get_event_loop().time()
+    loop = asyncio.get_running_loop()
+    download_start = loop.time()
+    last_output = ""
 
     while True:
         try:
@@ -113,7 +115,7 @@ async def train_notebook(
         except asyncio.TimeoutError:
             # Keepalive: during the initial ~4 GB model download mlx_lm is silent
             # for minutes; without periodic events the SSE connection drops.
-            elapsed = int(asyncio.get_event_loop().time() - download_start)
+            elapsed = int(loop.time() - download_start)
             yield {"type": "progress", "message": f"Downloading model files… ({elapsed}s elapsed)", "percent": 6}
             continue
 
@@ -122,6 +124,7 @@ async def train_notebook(
         line = raw.decode("utf-8", errors="replace").strip()
         if not line:
             continue
+        last_output = line
         if "Iter" in line and ":" in line:
             try:
                 step = int(line.split("Iter")[1].split(":")[0].strip())
@@ -130,11 +133,12 @@ async def train_notebook(
             except (ValueError, IndexError):
                 pass
         elif any(k in line.lower() for k in ("download", "fetch", "loading")):
-            yield {"type": "progress", "message": line[:100], "percent": 6}
+            yield {"type": "progress", "message": line[:120], "percent": 6}
 
     rc = await process.wait()
     if rc != 0:
-        yield {"type": "error", "message": f"Training failed (exit {rc}). Open macOS Console and filter for LocalNotebookLM for details."}
+        detail = f" — {last_output[:200]}" if last_output else ""
+        yield {"type": "error", "message": f"Training failed (exit {rc}){detail}"}
         return
 
     yield {"type": "done", "message": "Training complete! This notebook now uses your fine-tuned model.", "percent": 100}
@@ -156,5 +160,5 @@ def _generate_sync(adapter_path: str, prompt: str) -> str:
 
 async def generate_with_adapter(notebook_id: str, prompt: str) -> str:
     adapter_path = str(_adapter_dir(notebook_id))
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_mlx_executor, _generate_sync, adapter_path, prompt)

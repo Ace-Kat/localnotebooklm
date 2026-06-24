@@ -549,8 +549,9 @@ function renderDocuments() {
   const totalChunks = state.documents.reduce((s, d) => s + d.chunk_count, 0);
   document.getElementById('large-notebook-notice').classList.toggle('hidden', totalChunks < LARGE_CHUNK_THRESHOLD);
 
-  // Re-render train section now that doc count is known
-  checkTrainingStatus();
+  // Re-render train section now that doc count is known (skip if training is running
+  // to avoid hiding the progress bar mid-train)
+  if (!trainingInProgress) checkTrainingStatus();
 }
 
 async function removeDocument(filename) {
@@ -787,18 +788,11 @@ function scrollChatToBottom() {
 function show(screenId) {
   ['loading-screen', 'setup-screen', 'main-app'].forEach(id => {
     document.getElementById(id).classList.toggle('hidden', id !== screenId);
-    document.getElementById(id).classList.toggle('hidden', id !== screenId);
   });
-  // loading-screen uses display:flex not hidden, handle separately
+  // loading-screen is display:flex via CSS; force the inline style so it overrides
+  // any previous inline display:none set on it by a prior show() call.
   const loading = document.getElementById('loading-screen');
-  if (screenId === 'loading-screen') {
-    loading.style.display = 'flex';
-    document.getElementById('setup-screen').classList.add('hidden');
-    document.getElementById('main-app').classList.add('hidden');
-  } else {
-    loading.style.display = 'none';
-    document.getElementById(screenId).classList.remove('hidden');
-  }
+  loading.style.display = screenId === 'loading-screen' ? 'flex' : 'none';
 }
 
 function esc(str) {

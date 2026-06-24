@@ -123,6 +123,7 @@ def delete_notebook(nb_id: str):
     if not database.get_notebook(nb_id):
         raise HTTPException(404, "Notebook not found.")
     rag.delete_collection(nb_id)
+    training.delete_adapter(nb_id)
     database.delete_notebook(nb_id)
 
 
