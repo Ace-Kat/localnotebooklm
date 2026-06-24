@@ -81,8 +81,12 @@ async def train_notebook(
         "percent": 5,
     }
 
+    # In a PyInstaller frozen binary sys.executable is the binary itself, not Python.
+    # We pass --lora-train so the binary's __main__ re-invokes mlx_lm.lora via runpy
+    # instead of starting another server on port 47392.
+    lora_flag = ["--lora-train"] if getattr(sys, "frozen", False) else ["-m", "mlx_lm.lora"]
     cmd = [
-        sys.executable, "-m", "mlx_lm.lora",
+        sys.executable, *lora_flag,
         "--model", BASE_MODEL_MLX,
         "--train",
         "--data", str(data_dir),
@@ -101,8 +105,18 @@ async def train_notebook(
         stderr=asyncio.subprocess.STDOUT,
     )
 
+    download_start = asyncio.get_event_loop().time()
+
     while True:
-        raw = await process.stdout.readline()
+        try:
+            raw = await asyncio.wait_for(process.stdout.readline(), timeout=20.0)
+        except asyncio.TimeoutError:
+            # Keepalive: during the initial ~4 GB model download mlx_lm is silent
+            # for minutes; without periodic events the SSE connection drops.
+            elapsed = int(asyncio.get_event_loop().time() - download_start)
+            yield {"type": "progress", "message": f"Downloading model files… ({elapsed}s elapsed)", "percent": 6}
+            continue
+
         if not raw:
             break
         line = raw.decode("utf-8", errors="replace").strip()

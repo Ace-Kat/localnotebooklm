@@ -1,4 +1,5 @@
 import os
+import sys
 import asyncio
 import json
 from typing import AsyncGenerator
@@ -254,5 +255,13 @@ def clear_chat(nb_id: str):
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=47392)
+    # When the frozen binary is spawned for LoRA training it receives --lora-train
+    # followed by the same args that mlx_lm.lora normally takes. We re-invoke the
+    # module via runpy so mlx_lm (bundled inside the binary) runs instead of the server.
+    if len(sys.argv) > 1 and sys.argv[1] == "--lora-train":
+        import runpy
+        sys.argv = ["mlx_lm.lora"] + sys.argv[2:]
+        runpy.run_module("mlx_lm.lora", run_name="__main__", alter_sys=True)
+    else:
+        import uvicorn
+        uvicorn.run(app, host="127.0.0.1", port=47392)
